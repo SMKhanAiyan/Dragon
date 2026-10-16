@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dragon Hide &amp; Seek</title>
+<style>
+:root{--bg:#f6f0e2;--fg:#2b2a33;--card:#fff;--mute:#d9d3c3;--on:#2e9d5b;--pri:#e2552d;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1a22;--fg:#f0eee8;--card:#2a2933;--mute:#44424f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1b1a22;--fg:#f0eee8;--card:#2a2933;--mute:#44424f;color-scheme:dark}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:820px;margin:0 auto;padding:12px;text-align:center}
+h1{font-size:1.7rem;margin:6px 0 10px;background:linear-gradient(90deg,#ff7a18,#e2342d,#8e44ad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.bar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:10px}
+button{font:inherit;font-weight:700;padding:9px 14px;border-radius:12px;border:2px solid transparent;background:var(--card);color:var(--fg);cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.2)}
+button:active{transform:translateY(3px);box-shadow:none}
+.tg[aria-pressed="true"]{background:var(--on);color:#fff}
+.tg[aria-pressed="false"]{background:var(--mute);color:var(--fg)}
+.pri{background:linear-gradient(#ff8a3d,#e2552d);color:#fff}
+#bRoar{background:linear-gradient(#ffd23f,#ff7a18);color:#3a1500}
+canvas{width:100%;max-width:800px;height:auto;border-radius:18px;touch-action:none;display:block;margin:0 auto;box-shadow:0 0 0 4px #ff9a3d,0 8px 24px rgba(0,0,0,.35)}
+#st{font-weight:700;margin:12px 0 2px}
+#hint,#leg{font-size:.88rem;opacity:.85;margin:3px 0}
+</style></head><body><main>
+<h1>🔥 Dragon Hide &amp; Seek 🐹</h1>
+<div class="bar">
+<button id="bH" class="tg"></button>
+<button id="bB" class="tg"></button>
+<button id="bR"></button>
+<button id="bS" class="pri">▶ Start</button>
+<button id="bRoar" style="display:none">🔥 Breathe Fire</button>
+</div>
+<canvas id="c" width="800" height="500"></canvas>
+<p id="st"></p><p id="hint"></p>
+<p id="leg">🌳 tree • 🍄 mushroom, ⛺ tent, 📦 box (these <b>burn</b> when roasted!) • ⛰️ cave &amp; 💧 pond (fireproof!)</p>
+</main>
+<script>
+const $=id=>document.getElementById(id),cv=$('c'),ctx=cv.getContext('2d'),W=800,H=500;
+const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.random()*a.length|0],dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const S={human:true,bots:true,role:'animal',phase:'idle',t:0,now:0,msg:'',wins:{d:0,a:0}};
+const TY={tree:{e:'🌳',r:42},tent:{e:'⛺',r:38,burn:1},mush:{e:'🍄',r:34,burn:1},rock:{e:'⛰️',r:44,safe:1},pond:{pond:1,r:46,safe:1},box:{e:'📦',r:30,burn:1}};
+const SP=[['tree',110,100],['tent',290,75],['mush',500,115],['rock',690,95],['pond',85,300],['box',250,255],['tree',440,335],['tent',620,275],['rock',730,410],['pond',200,440],['mush',400,448],['box',560,428],['tree',390,190]].map(([t,x,y])=>({...TY[t],t,x,y,chk:-99,bt:0,sh:0}));
+const FL=Array.from({length:30},()=>[rnd(10,W-10),rnd(10,H-10),pick(['🌼','🌸','🍄','🌷','🌿'])]);
+const QA=['hehe','shhh!','not me!','🤫','pls no','I am a bush','squeak!','nope nope'];
+let D,A,keys={},ptr=null,last=0,shake=0;const P=[];
+const bg=document.createElement('canvas');bg.width=W;bg.height=H;
+(function(){const g=bg.getContext('2d');for(let i=0;i<10;i++){g.fillStyle=i%2?'#7ccb62':'#72c25b';g.fillRect(i*80,0,80,H)}
+ const r=g.createRadialGradient(W/2,H/2,20,W/2,H/2,150);r.addColorStop(0,'#d9b26f');r.addColorStop(1,'rgba(217,178,111,0)');g.fillStyle=r;g.fillRect(0,0,W,H);
+ g.textAlign='center';g.textBaseline='middle';FL.forEach(f=>{g.font='15px serif';g.fillText(f[2],f[0],f[1])})})();
+function spark(x,y,vx,vy,l,r,c,add,gr=0){P.push({x,y,vx,vy,l,m:l,r,c,add,gr})}
+function burst(x,y,n,cols,sp=5){for(let i=0;i<n;i++){const a=rnd(0,6.28),s=rnd(1,sp);spark(x,y,Math.cos(a)*s,Math.sin(a)*s,rnd(.6,1.4),rnd(3,6),pick(cols),0,.12)}}
+function reset(){
+ D={x:W/2,y:H/2,e:'🐉',cd:0,fire:0,eat:0,ang:0,fx:1,say:'',st:0,tgt:null};
+ A=['🐹','🐸','🐔','🐧','🦆'].map((e,i)=>({e,x:W/2+(i-2)*34,y:H/2+50,caught:false,tgt:null,fl:false,rev:0,say:'',st:0,thk:0,gig:rnd(1,4),off:{x:rnd(-14,14),y:rnd(-10,10)}}));
+ SP.forEach(b=>{b.chk=-99;b.bt=0});P.length=0;
+}
+function inBush(e){return SP.find(b=>b.bt<=0&&Math.hypot(b.x-e.x,b.y-e.y)<b.r*.8)}
+function move(e,dx,dy,sp,k){const l=Math.hypot(dx,dy);if(l>.01){e.x+=dx/l*sp*k;e.y+=dy/l*sp*k;e.mv=true;e.ang=Math.atan2(dy,dx);if(Math.abs(dx)>.3)e.fx=dx>0?1:-1}e.x=Math.max(20,Math.min(W-20,e.x));e.y=Math.max(24,Math.min(H-20,e.y))}
+function goto(e,x,y,sp,k){const dx=x-e.x,dy=y-e.y,d=Math.hypot(dx,dy);if(d>4)move(e,dx,dy,sp,k);return d<6}
+function humanMove(e,sp,k){
+ let dx=(keys.arrowright||keys.d?1:0)-(keys.arrowleft||keys.a?1:0),dy=(keys.arrowdown||keys.s?1:0)-(keys.arrowup||keys.w?1:0);
+ if(!dx&&!dy&&ptr){dx=ptr.x-e.x;dy=ptr.y-e.y;if(Math.hypot(dx,dy)<8)return}
+ move(e,dx,dy,sp,k);
+}
+function pickSpot(a,flee){
+ let best=null,bs=-1e9;
+ SP.forEach(b=>{const dd=Math.hypot(b.x-D.x,b.y-D.y);if(b.bt>0||(flee&&dd<170))return;
+  const crowd=A.filter(o=>o!==a&&o.tgt===b).length,da=Math.hypot(b.x-a.x,b.y-a.y);
+  const s=(flee?dd*.5-da*.6:rnd(0,300)-da*.3)-crowd*200;if(s>bs){bs=s;best=b}});
+ return best||pick(SP);
+}
+function botA(a,k,dt){
+ a.thk-=dt;const dd=dist(a,D);
+ if(S.phase==='seek'&&a.thk<=0){a.thk=.35;
+  const hid=!!inBush(a),threat=dd<(hid?70:140)||(a.rev>0&&dd<200);
+  if(threat){const t=pickSpot(a,true);if(t!==a.tgt){a.tgt=t;a.fl=true;if(a.st<=0){a.say=pick(QA);a.st=1.2}}}}
+ if(!a.tgt||a.tgt.bt>0)a.tgt=pickSpot(a,false);
+ const sp=S.phase==='hide'?2.2:(a.fl?2.1:1.9);
+ if(goto(a,a.tgt.x+a.off.x,a.tgt.y+a.off.y,sp,k))a.fl=false;
+}
+function botD(k){
+ if(D.eat>0)return;
+ let best=null,bd=1e9;
+ A.forEach(a=>{if(a.caught)return;const d=dist(a,D);if((!inBush(a)||a.rev>0)&&d<230&&d<bd){best=a;bd=d}});
+ if(best){D.tgt=null;goto(D,best.x,best.y,2.2,k);return}
+ if(!D.tgt||D.tgt.bt>0){D.tgt=null;let bs=1e9;SP.forEach(b=>{const s=Math.hypot(b.x-D.x,b.y-D.y)+(S.now-b.chk<12?500:0)+rnd(0,80);if(b.bt<=0&&s<bs){bs=s;D.tgt=b}})}
+ if(!D.tgt)return;
+ const d=Math.hypot(D.tgt.x-D.x,D.tgt.y-D.y);
+ if(d<130&&d>40&&D.tgt.burn&&D.cd<=0)blow();
+ if(goto(D,D.tgt.x,D.tgt.y,2.0,k)){D.tgt.chk=S.now;D.tgt=null}
+}
+function blow(){
+ if(S.phase!=='seek'||D.cd>0||D.eat>0)return;
+ D.cd=3.5;D.fire=.7;D.say='HAAAA! 🔥';D.st=1;shake=.25;
+}
+function end(w){
+ S.phase='over';S.wins[w]++;
+ if(w==='d'){S.msg='🔥 Dragon wins! Snack time!';burst(D.x,D.y,60,['#ff7a18','#ffd23f','#e2342d'],7)}
+ else{S.msg='🎉 Animals win! Nobody got eaten!';for(let i=0;i<5;i++)burst(rnd(100,700),rnd(80,300),30,['#ff4d6d','#ffd23f','#4dd2ff','#7dff6b','#c77dff'],6)}
+}
+function start(){
+ if(!S.human&&!S.bots){S.msg='Turn Human or Bots ON first!';S.phase='idle';return}
+ reset();S.phase='hide';S.t=8;S.msg='';
+}
+function inCone(o){const dx=o.x-D.x,dy=o.y-D.y;return Math.hypot(dx,dy)<160&&Math.abs(((Math.atan2(dy,dx)-D.ang+9.4248)%6.2832)-3.1416)<.7}
+function update(dt){
+ const k=dt*60;S.now+=dt;shake=Math.max(0,shake-dt);
+ for(let i=P.length-1;i>=0;i--){const p=P[i];p.x+=p.vx*k;p.y+=p.vy*k;p.vy+=p.gr*k;p.l-=dt;if(p.l<=0)P.splice(i,1)}
+ [D,...A].forEach(e=>{e.mv=false;if(e.st>0){e.st-=dt;if(e.st<=0)e.say=''}});
+ D.cd=Math.max(0,D.cd-dt);D.eat=Math.max(0,D.eat-dt);A.forEach(a=>a.rev=Math.max(0,a.rev-dt));
+ SP.forEach(b=>{b.bt=Math.max(0,b.bt-dt);b.sh=Math.max(0,b.sh-dt);if(b.bt>5&&Math.random()<.5)spark(b.x+rnd(-15,15),b.y+rnd(-10,10),0,-1.5,.5,rnd(4,8),'',1)});
+ if(S.phase!=='hide'&&S.phase!=='seek')return;
+ S.t-=dt;
+ if(S.phase==='hide'&&S.t<=0){S.phase='seek';S.t=70;D.say='Ready or not!';D.st=2}
+ else if(S.phase==='seek'&&S.t<=0){end('a');return}
+ const hd=S.human&&S.role==='dragon',ha=S.human&&S.role==='animal';
+ A.forEach((a,i)=>{if(a.caught)return;
+  if(ha&&i===0)humanMove(a,2.2,k);else if(S.bots)botA(a,k,dt);
+  const s=inBush(a);if(s){a.gig-=dt;if(a.gig<=0){a.gig=rnd(3,6);s.sh=.6}}});
+ if(S.phase!=='seek')return;
+ if(D.eat<=0){if(hd)humanMove(D,2.4,k);else if(S.bots)botD(k)}
+ if(D.fire>0){D.fire-=dt;
+  for(let i=0;i<4;i++){const a=D.ang+rnd(-.22,.22),s=rnd(4,7.5);spark(D.x+Math.cos(D.ang)*34,D.y+Math.sin(D.ang)*34-4,Math.cos(a)*s,Math.sin(a)*s,rnd(.35,.6),rnd(5,10),'',1)}
+  SP.forEach(b=>{if(b.burn&&b.bt<=0&&inCone(b)){b.bt=6;burst(b.x,b.y,18,['#ff9a1f','#ffd23f','#555'],4);A.forEach(a=>{if(!a.caught&&dist(a,b)<b.r)a.rev=1.5})}});
+  A.forEach(a=>{if(a.caught||!inCone(a))return;const s=inBush(a);if(!(s&&s.safe)){a.rev=1.5;if(a.st<=0){a.say='HOT HOT!';a.st=1}}});
+ }
+ if(D.eat<=0){const v=A.find(a=>!a.caught&&dist(a,D)<28);
+  if(v){v.caught=true;v.say='Nooo!';v.st=1.5;D.eat=5;D.say='NOM NOM 😋';D.st=2;shake=.3;burst(v.x,v.y,20,['#ffd23f','#fff','#ff7a18'],5)}}
+ if(A.every(a=>a.caught))end('d');
+}
+function txt(s,x,y,sz,al=1){ctx.globalAlpha=al;ctx.font=sz+'px serif';ctx.fillText(s,x,y);ctx.globalAlpha=1}
+function shadow(x,y,w){ctx.fillStyle='rgba(0,0,0,.22)';ctx.beginPath();ctx.ellipse(x,y+14,w,w*.35,0,0,7);ctx.fill()}
+function bubble(e,y0){
+ if(!e.say)return;ctx.font='bold 13px system-ui';const w=ctx.measureText(e.say).width+14,x=e.x-w/2,y=e.y-y0;
+ ctx.fillStyle='#fff';ctx.strokeStyle='#333';ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(x,y-11,w,22,8);ctx.fill();ctx.stroke();
+ ctx.fillStyle='#222';ctx.fillText(e.say,e.x,y);
+}
+function tri(x1,y1,x2,y2,x3,y3,c){ctx.fillStyle=c;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.lineTo(x3,y3);ctx.fill()}
+function drawDragon(){
+ const t=S.now,fl=Math.sin(t*(D.eat>0?3:12))*.5;
+ shadow(D.x,D.y+8,30);
+ ctx.save();ctx.translate(D.x,D.y+Math.sin(t*4)*3);ctx.scale(D.fx,1);
+ ctx.strokeStyle='#2f8a3e';ctx.lineWidth=9;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-14,6);ctx.quadraticCurveTo(-36,22+Math.sin(t*5)*6,-48,0);ctx.stroke();
+ tri(-48,0,-58,-6,-56,8,'#e2342d');
+ [[1,'#8e2a2a'],[.6,'#c0392b']].forEach(([s,c])=>{ctx.fillStyle=c;ctx.strokeStyle='#5b1414';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(-38*s,-36*s-24*fl);ctx.quadraticCurveTo(-30*s,-24,-24*s,-22);ctx.quadraticCurveTo(-18*s,-26,-12*s,-36*s-12*fl);ctx.quadraticCurveTo(-4*s,-18,0,-8);ctx.fill();ctx.stroke()});
+ ctx.fillStyle='#3fae4f';ctx.beginPath();ctx.ellipse(0,2,23,15,0,0,7);ctx.fill();
+ ctx.fillStyle='#d7f28a';ctx.beginPath();ctx.ellipse(3,8,15,7,0,0,7);ctx.fill();
+ for(let i=-2;i<3;i++)tri(i*8-4,-12,i*8,-21,i*8+4,-12,'#ff7a18');
+ ctx.fillStyle='#2f8a3e';ctx.beginPath();ctx.arc(-8,16,6,0,7);ctx.arc(10,16,6,0,7);ctx.fill();
+ ctx.fillStyle='#4cc05c';ctx.beginPath();ctx.arc(24,-4,12,0,7);ctx.fill();
+ ctx.beginPath();ctx.ellipse(34,0,9,6,0,0,7);ctx.fill();
+ tri(18,-13,16,-25,24,-14,'#f5e6a8');tri(25,-14,28,-26,31,-12,'#f5e6a8');
+ ctx.fillStyle='#fff';ctx.strokeStyle='#111';ctx.lineWidth=2;
+ if(D.eat>0){ctx.beginPath();ctx.moveTo(23,-8);ctx.lineTo(31,-8);ctx.stroke()}else{ctx.beginPath();ctx.arc(27,-8,4,0,7);ctx.fill();ctx.fillStyle='#111';ctx.beginPath();ctx.arc(28,-8,2,0,7);ctx.fill()}
+ ctx.fillStyle='#1d5a27';ctx.fillRect(38,-3,2,2);
+ ctx.restore();
+}
+function overlay(a,l1,l2){
+ ctx.fillStyle='rgba(15,12,30,'+a+')';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';
+ ctx.font='bold 40px system-ui';ctx.fillText(l1,W/2,H/2-14);ctx.font='20px system-ui';ctx.fillText(l2,W/2,H/2+28);
+}
+function draw(){
+ const hd=S.human&&S.role==='dragon',ha=S.human&&S.role==='animal';
+ ctx.textAlign='center';ctx.textBaseline='middle';
+ ctx.save();if(shake>0)ctx.translate(rnd(-1,1)*shake*20,rnd(-1,1)*shake*20);
+ ctx.drawImage(bg,0,0);
+ SP.forEach(b=>{const x=b.x+Math.sin(S.now*45)*b.sh*5;
+  if(b.pond){const g=ctx.createRadialGradient(b.x,b.y,5,b.x,b.y,b.r);g.addColorStop(0,'#7fd6ff');g.addColorStop(1,'#2f8fd0');ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(x,b.y,b.r,b.r*.75,0,0,7);ctx.fill();
+   const q=(S.now*.8)%1;ctx.strokeStyle='rgba(255,255,255,'+(1-q)+')';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(b.x,b.y,b.r*q,b.r*.75*q,0,0,7);ctx.stroke();txt('💧',b.x+b.r*.45,b.y-b.r*.4,16)}
+  else if(b.bt>0){ctx.fillStyle='rgba(40,30,30,.45)';ctx.beginPath();ctx.ellipse(b.x,b.y+6,b.r*.8,b.r*.5,0,0,7);ctx.fill();txt(b.bt>5?'🔥':'💨',b.x,b.y,b.bt>5?64+Math.sin(S.now*30)*6:40,b.bt>5?1:.7)}
+  else{shadow(b.x,b.y+b.r*.4,b.r*.8);txt(b.e,x,b.y,b.r*2.1)}
+ });
+ A.forEach((a,i)=>{
+  const hid=!!inBush(a),bob=a.mv?Math.sin(S.now*14+i)*3:0;
+  if(a.caught)return;
+  if(hid&&a.rev<=0){if(!hd)txt(a.e,a.x,a.y,26,.55)}
+  else{shadow(a.x,a.y,14);txt(a.e,a.x,a.y+bob,34)}
+  if(ha&&i===0){ctx.strokeStyle='#ffe14d';ctx.lineWidth=3;ctx.beginPath();ctx.arc(a.x,a.y,22+Math.sin(S.now*6)*2,0,7);ctx.stroke();txt('YOU',a.x,a.y+32,12)}
+ });
+ drawDragon();
+ if(hd){ctx.strokeStyle='#ffe14d';ctx.lineWidth=3;ctx.beginPath();ctx.arc(D.x,D.y,34+Math.sin(S.now*6)*2,0,7);ctx.stroke()}
+ if(D.eat>0)txt('😋 chewing '+Math.ceil(D.eat)+'s',D.x,D.y-50,16);
+ ctx.globalCompositeOperation='lighter';
+ P.forEach(p=>{const u=p.l/p.m;if(p.add){ctx.fillStyle='rgba(255,'+(170*u|0)+',30,'+u+')';ctx.beginPath();ctx.arc(p.x,p.y,p.r*(1.6-u),0,7);ctx.fill()}});
+ ctx.globalCompositeOperation='source-over';
+ P.forEach(p=>{if(!p.add){ctx.globalAlpha=Math.min(1,p.l/p.m*1.5);ctx.fillStyle=p.c;ctx.fillRect(p.x,p.y,p.r,p.r);ctx.globalAlpha=1}});
+ A.forEach(a=>{if(!a.caught&&!(hd&&inBush(a)&&a.rev<=0))bubble(a,30)});bubble(D,48);
+ ctx.restore();
+ const v=ctx.createRadialGradient(W/2,H/2,H*.45,W/2,H/2,W*.65);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(30,10,50,.4)');ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+ ctx.fillStyle='rgba(0,0,0,.45)';ctx.beginPath();ctx.roundRect(8,8,150,30,10);ctx.fill();ctx.fillStyle='#fff';ctx.font='13px system-ui';ctx.fillText('🐉 belly:',42,23);
+ A.forEach((a,i)=>{if(a.caught)txt(a.e,72+i*24,23,18)});
+ if(S.phase==='idle')overlay(.55,'🐉 Dragon Hide & Seek',S.msg||'Press Start!');
+ else if(S.phase==='hide'){
+  if(hd)overlay(1,'🙈 Dragon is counting…',Math.ceil(S.t)+'… animals are hiding!');
+  else{ctx.fillStyle='rgba(0,0,0,.5)';ctx.beginPath();ctx.roundRect(W/2-90,8,180,34,10);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 18px system-ui';ctx.fillText('🏃 Hide! '+Math.ceil(S.t)+'s',W/2,26)}}
+ else if(S.phase==='over')overlay(.6,S.msg,'Press Start to play again');
+ const c=A.filter(a=>a.caught).length;
+ $('st').textContent=(S.phase==='hide'?'Hiding time '+Math.ceil(S.t)+'s':S.phase==='seek'?'Seeking… '+Math.ceil(S.t)+'s left':S.msg||'Ready')+'  •  Caught '+c+'/5  •  🔥 '+(D.cd>0?Math.ceil(D.cd)+'s':'READY')+'  •  🐉 '+S.wins.d+' : '+S.wins.a+' 🐹';
+ $('hint').textContent=!S.human?'Spectator mode: watch the bots battle! 🍿':
+  (S.role==='dragon'?'You are the Dragon: move with WASD/arrows or drag. Touch an animal to catch it (then you chew for 5s!). Space = fire breath, watch for wiggling hideouts!':
+  'You are the Hamster 🐹: hide in a spot and stay still, or run when the dragon is chewing! WASD/arrows or drag.')+(S.bots?'':' (Bots off: others stand still.)');
+}
+function ui(){
+ [['bH','Human',S.human],['bB','Bots',S.bots]].forEach(([id,n,v])=>{$(id).textContent=n+': '+(v?'ON':'OFF');$(id).setAttribute('aria-pressed',v)});
+ $('bR').textContent='Play as: '+(S.role==='dragon'?'🐉 Dragon':'🐹 Animal');
+ $('bRoar').style.display=S.human&&S.role==='dragon'?'':'none';
+}
+$('bH').onclick=()=>{S.human=!S.human;ui()};
+$('bB').onclick=()=>{S.bots=!S.bots;ui()};
+$('bR').onclick=()=>{S.role=S.role==='dragon'?'animal':'dragon';ui();if(S.phase!=='idle')start()};
+$('bS').onclick=start;$('bRoar').onclick=blow;
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k===' '?'space':k]=1;
+ if(e.key===' '){if(S.human&&S.role==='dragon')blow();e.preventDefault()}if(e.key.startsWith('Arrow'))e.preventDefault()});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();keys[k===' '?'space':k]=0});
+function pp(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+cv.addEventListener('pointerdown',e=>{ptr=pp(e)});
+cv.addEventListener('pointermove',e=>{if(ptr)ptr=pp(e)});
+addEventListener('pointerup',()=>ptr=null);
+reset();ui();
+function loop(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;update(dt);draw();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script></body></html>
